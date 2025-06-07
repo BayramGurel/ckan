@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <abortOnConfigurationError>${solr.abortOnConfigurationError:true}</abortOnConfigurationError>
+  <luceneMatchVersion>LUCENE_82</luceneMatchVersion>
+
+  <directoryFactory name="DirectoryFactory" class="${solr.directoryFactory:solr.StandardDirectoryFactory}"/>
+  <schemaFactory class="ClassicIndexSchemaFactory"/>
+
+  <updateHandler class="solr.DirectUpdateHandler2">
+    <updateLog>
+      <str name="dir">${solr.ulog.dir:}</str>
+      <int name="numRecordsToKeep">500</int>
+      <int name="maxNumLogsToKeep">20</int>
+      <int name="numVersionBuckets">65536</int>
+    </updateLog>
+  </updateHandler>
+
+  <indexConfig>
+    <ramBufferSizeMB>100</ramBufferSizeMB>
+    <maxBufferedDocs>1000</maxBufferedDocs>
+    <useCompoundFile>false</useCompoundFile>
+    <mergePolicyFactory class="org.apache.solr.index.TieredMergePolicyFactory">
+      <int name="maxMergeAtOnce">10</int>
+      <int name="segmentsPerTier">10</int>
+    </mergePolicyFactory>
+    <mergeScheduler class="org.apache.lucene.index.ConcurrentMergeScheduler"/>
+    <mergedSegmentWarmer class="org.apache.lucene.index.SimpleMergedSegmentWarmer"/>
+    <lockType>native</lockType>
+    <writeLockTimeout>1000</writeLockTimeout>
+    <reopenReaders>true</reopenReaders>
+    <deletionPolicy class="solr.SolrDeletionPolicy">
+      <str name="maxCommitsToKeep">1</str>
+      <str name="maxOptimizedCommitsToKeep">0</str>
+      <str name="maxCommitAge">1DAY</str>
+    </deletionPolicy>
+    <infoStream>false</infoStream>
+  </indexConfig>
+
+  <query>
+    <maxBooleanClauses>1024</maxBooleanClauses>
+    <filterCache class="solr.FastLRUCache" size="512" initialSize="512" autowarmCount="0"/>
+    <queryResultCache class="solr.LRUCache" size="512" initialSize="512" autowarmCount="0"/>
+    <documentCache class="solr.LRUCache" size="512" initialSize="512" autowarmCount="0"/>
+    <enableLazyFieldLoading>true</enableLazyFieldLoading>
+    <queryResultWindowSize>20</queryResultWindowSize>
+    <queryResultMaxDocsCached>200</queryResultMaxDocsCached>
+    <listener event="newSearcher" class="solr.QuerySenderListener">
+      <arr name="queries"/>
+    </listener>
+    <listener event="firstSearcher" class="solr.QuerySenderListener">
+      <arr name="queries">
+        <lst>
+          <str name="q">*:*</str>
+        </lst>
+      </arr>
+    </listener>
+    <useColdSearcher>false</useColdSearcher>
+    <maxWarmingSearchers>2</maxWarmingSearchers>
+  </query>
+
+  <requestDispatcher>
+    <requestParsers enableRemoteStreaming="true" multipartUploadLimitInKB="2048000"/>
+    <httpCaching never304="true"/>
+  </requestDispatcher>
+
+  <!-- 1) ExtractingRequestHandler voor full‐text uit bestanden -->
+  <requestHandler name="/update/extract" class="solr.extraction.ExtractingRequestHandler">
+    <lst name="defaults">
+      <str name="lowernames">true</str>
+      <str name="captureAttr"/>
+      <str name="fmap.content">text</str>
+      <str name="uprefix">attr_</str>
+      <str name="defaultValue">-</str>
+    </lst>
+  </requestHandler>
+
+  <!-- 2) Select‐handler die edismax gebruikt om op “text” te zoeken -->
+  <requestHandler name="/select" class="solr.SearchHandler">
+    <lst name="defaults">
+      <!--
+        qf=tekstvelden, hier minimaal “text” voor full‐text.
+        Voeg hier velden toe als je ook in titel of in een custom veld wilt zoeken:
+        bv. “title^2” voor boosted titels, “notes” of “keywords” enz.
+      -->
+      <str name="q.op">AND</str>
+      <str name="echoParams">explicit</str>
+      <str name="df">text</str>
+      <str name="qf">text</str>
+      <str name="defType">edismax</str>
+      <int name="rows">100</int>
+    </lst>
+    <!-- Optioneel: simpele facet‐instelling als je snel wat facetvelden wilt -->
+    <lst name="appends">
+      <str name="facet">true</str>
+      <str name="facet.mincount">1</str>
+      <str name="facet.field">publisher</str>
+      <str name="facet.field">language</str>
+      <str name="facet.field">tags</str>
+      <str name="spellcheck">true</str>
+      <str name="spellcheck.dictionary">spellchecker</str>
+      <str name="spellcheck.count">1</str>
+      <str name="spellcheck.collate">true</str>
+    </lst>
+    <arr name="last-components">
+      <str>spellcheck_component</str>
+    </arr>
+  </requestHandler>
+
+  <!-- Overige handlers blijven ongewijzigd -->
+  <requestHandler name="/update/json" class="solr.JsonUpdateRequestHandler" startup="lazy"/>
+  <requestHandler name="/analysis/field" class="solr.FieldAnalysisRequestHandler" startup="lazy"/>
+  <requestHandler name="/analysis/document" class="solr.DocumentAnalysisRequestHandler" startup="lazy"/>
+
+  <searchComponent name="spellcheck_component" class="solr.SpellCheckComponent">
+    <lst name="spellchecker">
+      <str name="name">spellchecker</str>
+      <str name="classname">solr.IndexBasedSpellChecker</str>
+      <str name="spellcheckIndexDir">spellchecker</str>
+      <str name="field">spellcheck</str>
+    </lst>
+  </searchComponent>
+
+  <queryResponseWriter name="json" class="solr.JSONResponseWriter"/>
+
+  <admin>
+    <defaultQuery>*:*</defaultQuery>
+  </admin>
+</config>
